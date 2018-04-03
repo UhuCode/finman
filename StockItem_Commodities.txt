@@ -1,0 +1,10 @@
+^SSMI;0
+^DJI;0
+GC=F;0
+SI=F;0
+PL=F;0
+PA=F;0
+BZ=F;0
+C=F;0
+O=F;0
+S=F;0

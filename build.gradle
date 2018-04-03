@@ -18,7 +18,7 @@ repositories {
 
 dependencies {
 
-    compile group: 'com.yahoofinance-api', name: 'YahooFinanceAPI', version: '3.12.0'
+    compile group: 'com.yahoofinance-api', name: 'YahooFinanceAPI', version: '3.12.3'
     
 	// https://mvnrepository.com/artifact/org.jfree/jfreechart
 	compile group: 'org.jfree', name: 'jfreechart', version: '1.5.0'  

@@ -1,5 +1,3 @@
-^SSMI;0
-^DJI;0
 GC=F;0
 SI=F;0
 PL=F;0

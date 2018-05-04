@@ -33,6 +33,8 @@ public class StockDataSeries {
 	
 	private String symbol = "";
 	private float paidPrice;
+	private StockItem stockItem;
+	
 	private Stock stock;
 	private List<HistoricalQuote> records;
 	
@@ -61,57 +63,79 @@ public class StockDataSeries {
 		this.indexedTimeSeries = new TimeSeries(symbol);
 		this.timeSeries = new TimeSeries(symbol);
 		this.ohlcSeries = new OHLCSeries(symbol);
-		initializeStockData();
-		resetStartEndDate();
+	}
+	
+	public StockDataSeries(StockItem stockItem) {
+		this.symbol = stockItem.getStockSymbol();
+		this.paidPrice = stockItem.getPricePaid().floatValue();
+		this.stockItem = stockItem;
+		this.indexedTimeSeries = new TimeSeries(symbol);
+		this.timeSeries = new TimeSeries(symbol);
+		this.ohlcSeries = new OHLCSeries(symbol);
 	}
 	
 	public StockDataSeries(String symbol, BigDecimal pricePaid) {
 		this(symbol, pricePaid.floatValue());
 	}
 
-	public void initializeStockData() {
+//	public void initializeStockData() throws IOException {
+//		logger.sayOut("Requesting data for: " + symbol);
+//		stock = YahooFinance.get(symbol);
+//		if(stock != null && stock.isValid()) {
+//			logger.sayOut("Requesting history data for: " + stock.getName());
+//			records = requestHistory(stock, Interval.WEEKLY);
+//			if(!records.isEmpty()) {
+//				logger.sayOut("Received " + records.size() + " history data records. ");	
+//			} else {
+//				logger.sayOut("No history data received.");
+//				records = null;
+//			}
+//		} else {
+//			logger.sayOut("No data found for: " + symbol);
+//			stock = null;
+//		}
+//	}
+//
+	public boolean requestStockData() throws IOException {
 		logger.sayOut("Requesting data for: " + symbol);
-		stock = requestStock(symbol);
-		if(stock.isValid()) {
-			logger.sayOut("Requesting history data for: " + stock.getName());
-			records = requestHistory(stock, Interval.WEEKLY);
-			if(!records.isEmpty()) {
-				logger.sayOut("Received " + records.size() + " history data records. ");	
-			} else {
-				logger.sayOut("No history data received.");
-				records = null;
-			}
-		} else {
+		stock = YahooFinance.get(symbol);
+		if(stock == null || !stock.isValid()) {
 			logger.sayOut("No data found for: " + symbol);
 			stock = null;
+			return false;
+		} else {
+			logger.sayOut("Retrieved data for: " + symbol);
+			return true;
 		}
 	}
 
-	private Stock requestStock(String symbol) {
-		Stock stock = null;
-		try {
-			stock = YahooFinance.get(symbol);
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+	public boolean requestStockHistory() throws IOException {
+		if (records == null) {records = new ArrayList<HistoricalQuote>();}
+		logger.sayOut("Requesting history data for: " + stock.getName());
+		List<HistoricalQuote> list = stock.getHistory(Interval.DAILY);
+		if(!list.isEmpty()) {
+			logger.sayOut("Received " + list.size() + " history data records. ");
+			records = cleanHistoryList(list);
+			logger.sayOut("Cleaned List has " + records.size() + " history data records. ");
+			return true;
+		} else {
+			logger.sayOut("No history data received.");
+			return false;
 		}
-		return stock;
 	}
 	
-	private List<HistoricalQuote> requestHistory(Stock stock, Interval interval) {
+	private List<HistoricalQuote> cleanHistoryList(List<HistoricalQuote> recs) {
 		List<HistoricalQuote> list = new ArrayList<HistoricalQuote>();
-		try {
-			list = stock.getHistory(interval);
-			if(!list.isEmpty()) {
-				return list;
+		Iterator<HistoricalQuote> iter = recs.iterator();
+		while(iter.hasNext()) {
+			HistoricalQuote itm = (HistoricalQuote)iter.next();
+			if (itm.getClose() != null) {
+				list.add(itm);
 			}
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
 		}
-		return null;
+		return list;
 	}
-	
+
 	private List<HistoricalQuote> requestHistory(Stock stock, Date from, Date to, Interval interval) {
 		List<HistoricalQuote> list = new ArrayList<HistoricalQuote>();
 		Calendar fromCal = Calendar.getInstance();

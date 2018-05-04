@@ -52,6 +52,8 @@ import org.jfree.data.time.TimeSeriesCollection;
 import org.jfree.data.time.ohlc.OHLCSeriesCollection;
 import org.jfree.data.xy.OHLCDataset;
 import org.jfree.data.xy.XYDataset;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import ch.finman.util.LogUtil;
 
@@ -65,6 +67,9 @@ public class StockApplication {
 	
 	public static JFrame frame;
 	private static LogUtil logger = LogUtil.getLogger(StockApplication.class);
+	
+	private static final String DELIM_CHAR_SEMICOLON = ";";
+	private static final String DELIM_CHAR_COMMA = ",";
 	
 	StockItem ubs = new StockItem("UBS", new BigDecimal(0));
 	StockItem csgn = new StockItem("CSGN.VX", new BigDecimal(0));
@@ -87,6 +92,7 @@ public class StockApplication {
 	private OHLCSeriesCollection ohlcSeriesCollection;
 	private ProgressInfo progressInfo;
 	private SeriesFilterPanel filterPanel;
+	private Logger log;
 	
 	public StockApplication() {
 		createGUI();
@@ -146,6 +152,8 @@ public class StockApplication {
     }
     
 	private void initialize() {
+		log = LoggerFactory.getLogger(StockApplication.class);
+		log.debug("initialize");
 		stockManager = new StockManager(progressInfo);
 		dataSeries = new TimeSeriesCollection();
 		ohlcSeriesCollection = new OHLCSeriesCollection();
@@ -172,11 +180,12 @@ public class StockApplication {
 				while((ls.hasNextLine())) {
 					line = ls.nextLine();
 					if(line.trim().isEmpty()) continue;
-					String[] elements = line.split(";");
-					StockItem si = new StockItem(elements[0], new BigDecimal(elements[1]));
-					logger.sayOut("Reading Line[" + cnt + "]: " + elements[0] + " " + elements[1]);
+					String[] elements = line.split("[" + DELIM_CHAR_SEMICOLON + DELIM_CHAR_COMMA + "]");
+					StockItem si = StockItem.create("default", elements);
+					logger.sayOut("Reading Line[" + cnt + "]: " + line);
 					cnt++;
-					stockManager.addStockConfig(si);
+					stockManager.addStockItem(si);
+					stockManager.addStockItemToPortfolio("default", si);
 				}
 				ls.close();
 				logger.sayOut("Read a total of " + (cnt) + " records.");
@@ -604,21 +613,19 @@ public class StockApplication {
 		}
 		
 		public void run() {
-			//model = new StockTableModel();
 			model = new StockSeriesTableModel();
 			model.addTableModelListener(stockTable);
 			dataTable.setModel(model);
 			dataSeries.removeAllSeries();
 			ohlcSeriesCollection.removeAllSeries();
 			update("Getting Stock Data...");
-			try {
-				//stockManager.updateStockData(model, dataSeries, ohlcSeriesCollection);
-				stockManager.update(model, dataSeries, ohlcSeriesCollection);
-				filterPanel.setupSeriesDate();
-			} catch (IOException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
+			int cnt = stockManager.update(model, dataSeries, ohlcSeriesCollection);
+			if (cnt == 0) {
+				update("No Stock Data Series was created.");
+				finish();
+				return;
 			}
+			filterPanel.setupSeriesDate();
 			update("Creating Chart Data...");
 			JFreeChart chart = null;
 			chart = createTimeSeriesChart(dataSeries, null, "Price");

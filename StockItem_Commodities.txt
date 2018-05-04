@@ -6,3 +6,4 @@ BZ=F;0
 C=F;0
 O=F;0
 S=F;0
+^SSMI;0

@@ -48,7 +48,6 @@ public class ProgressInfo extends JPanel {
 			progressArea.setEditable(false);
   			DefaultCaret caret = (DefaultCaret)progressArea.getCaret();
   			caret.setUpdatePolicy(DefaultCaret.ALWAYS_UPDATE);
-
   			add(new JScrollPane(progressArea), BorderLayout.CENTER);
 			add(progressBar, BorderLayout.SOUTH);
 			cancelButton.setPreferredSize(new Dimension(16, 16));
@@ -67,6 +66,7 @@ public class ProgressInfo extends JPanel {
 		//progressString.setText("> " + note);
 		if(progressArea != null) {
 			progressArea.append("> " + note +"\n");
+			progressArea.moveCaretPosition(progressArea.getDocument().getLength());
 		}
 	}
 	

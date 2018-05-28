@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.List;
 import java.util.Locale;
 import java.util.Scanner;
 
@@ -55,6 +56,9 @@ import org.jfree.data.xy.XYDataset;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import ch.finman.model.StockEntry;
+import ch.finman.model.logic.AssetManager;
+import ch.finman.model.logic.StockEntityManager;
 import ch.finman.util.LogUtil;
 
 
@@ -93,6 +97,8 @@ public class StockApplication {
 	private ProgressInfo progressInfo;
 	private SeriesFilterPanel filterPanel;
 	private Logger log;
+	private AssetManager assetManager;
+	private StockEntityManager stockEntityManager;
 	
 	public StockApplication() {
 		createGUI();
@@ -157,11 +163,18 @@ public class StockApplication {
 		stockManager = new StockManager(progressInfo);
 		dataSeries = new TimeSeriesCollection();
 		ohlcSeriesCollection = new OHLCSeriesCollection();
+		assetManager = new AssetManager();
+		stockEntityManager = new StockEntityManager();
 	}
 	
   	public void setupDataTable() {
   		SetupDataThread sdt = new SetupDataThread();
   		sdt.start();
+	}
+
+  	public void refreshStockData() {
+  		RefreshDataThread rdt = new RefreshDataThread();
+  		rdt.start();
 	}
 
 	public ProgressInfo getProgressInfo() {
@@ -185,11 +198,55 @@ public class StockApplication {
 					logger.sayOut("Reading Line[" + cnt + "]: " + line);
 					cnt++;
 					stockManager.addStockItem(si);
-					stockManager.addStockItemToPortfolio("default", si);
+					//stockManager.addStockItemToPortfolio("default", si);
 				}
 				ls.close();
 				logger.sayOut("Read a total of " + (cnt) + " records.");
 				setupDataTable();
+			} catch (FileNotFoundException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		} else {
+			logger.sayOut("File not found: " + datafile);
+		}
+	}
+
+	protected void readData() {
+		int cnt = 0;
+		logger.sayOut("Reading from Database ");
+		List<StockEntry> stocks = stockEntityManager.getStockEntries();
+		for(StockEntry se : stocks) {
+			StockItem si = StockItem.create(se.getSymbol());
+			stockManager.addStockItem(si);
+			cnt++;
+		}
+		logger.sayOut("Read a total of " + cnt + " records.");
+		setupDataTable();
+	}
+
+	protected void importFile(String datafile) {
+		File f = new File(datafile);
+		int cnt = 0;
+		if (f.exists()) { 
+			logger.sayOut("Parsing File: " + f);
+			Scanner ls;
+			try {
+				ls = new Scanner(f);
+				String line;
+				while((ls.hasNextLine())) {
+					line = ls.nextLine();
+					if(line.trim().isEmpty()) continue;
+					String[] elements = line.split("[" + DELIM_CHAR_SEMICOLON + DELIM_CHAR_COMMA + "]");
+					StockItem si = StockItem.create("default", elements);
+					logger.sayOut("Reading Line[" + cnt + "]: " + line);
+					cnt++;
+					stockEntityManager.importStock(si.getStockSymbol());
+					//assetManager.importAsset(si.getStockSymbol(), "DP", si.getStockAmount(), si.getPricePaid());
+				}
+				ls.close();
+				logger.sayOut("Imported " + (cnt) + " records.");
+				refreshStockData();
 			} catch (FileNotFoundException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
@@ -295,16 +352,47 @@ public class StockApplication {
 	        menuFile = (JMenu)this.add(new JMenu("File"));
 	        menuFile.setMnemonic('F');
 	        if (true) {
-		        JMenuItem openItem = menuFile.add("Open...");
+		        JMenuItem openItem = menuFile.add("Open File...");
 		        openItem.addActionListener(new OpenAction());	        	
 	        }
 
-	        JMenuItem updateItem = menuFile.add("Update");
+	        JMenuItem openDbItem = menuFile.add("Open DB...");
+	        openDbItem.addActionListener(new AbstractAction() {
+				
+				@Override
+				public void actionPerformed(ActionEvent e) {
+					readData();      			
+				}
+			});	 
+	        
+	        JMenuItem importItem = menuFile.add("Import");
+	        importItem.addActionListener(new AbstractAction() {
+				
+				@Override
+				public void actionPerformed(ActionEvent e) {
+					Frame frame = new Frame();
+					FileDialog dialog = new FileDialog(frame, "Import...", FileDialog.LOAD);
+					frame.setLocation(350,150);
+					// set default data directory
+					//dialog.setDirectory();
+					dialog.setVisible(true);
+
+					if (dialog.getFile() != null) {
+						String dir = dialog.getDirectory();
+						String name = dialog.getFile();
+						logger.sayOut("Dir:  "+dir);
+						logger.sayOut("Name: "+name);
+						importFile(dir+name);
+					}            			
+				}
+			});	 
+	        
+	        JMenuItem updateItem = menuFile.add("Refresh");
 	        updateItem.addActionListener(new AbstractAction() {
 				
 				@Override
 				public void actionPerformed(ActionEvent e) {
-					setupDataTable();
+					refreshStockData();
 				}
 			});	 
 	        
@@ -323,7 +411,7 @@ public class StockApplication {
  	        setVisible(true);
 
 		}
-		// called when user selects File->Login menu item
+		
 		class OpenAction extends AbstractAction {
 			private static final long serialVersionUID = 3937695439391547394L;
 
@@ -618,13 +706,57 @@ public class StockApplication {
 			dataTable.setModel(model);
 			dataSeries.removeAllSeries();
 			ohlcSeriesCollection.removeAllSeries();
-			update("Getting Stock Data...");
-			int cnt = stockManager.update(model, dataSeries, ohlcSeriesCollection);
-			if (cnt == 0) {
-				update("No Stock Data Series was created.");
-				finish();
-				return;
+			
+			List<StockEntry> stocks = stockEntityManager.getStockEntries();
+			for(StockEntry se : stocks) {
+				update("Update Stock: " + se.getSymbol());
+				stockManager.update(se.getSymbol(), model, dataSeries, ohlcSeriesCollection);
 			}
+			stockManager.findSeriesStartEndDate();
+			filterPanel.setupSeriesDate();
+			
+//			update("Getting Stock Data...");
+//			int cnt = stockManager.update(model, dataSeries, ohlcSeriesCollection);
+//			if (cnt == 0) {
+//				update("No Stock Data Series was created.");
+//				finish();
+//				return;
+//			}
+//			filterPanel.setupSeriesDate();
+			
+			update("Creating Chart Data...");
+			JFreeChart chart = null;
+			chart = createTimeSeriesChart(dataSeries, null, "Price");
+			//chart = createOHLCSeriesChart(ohlcSeriesCollection, null, "Price");
+			chartPanel.setChart(chart);
+			chartPanel.setFillZoomRectangle(true);
+			chartPanel.setMouseWheelEnabled(true);
+			update("Done.");
+			finish();
+		}
+		
+	}
+
+	class RefreshDataThread extends PlotThread {
+		
+		public RefreshDataThread() {
+			super();
+			pi.setIndeterminate(true);
+		}
+		
+		public void run() {
+			model = new StockSeriesTableModel();
+			model.addTableModelListener(stockTable);
+			dataTable.setModel(model);
+			dataSeries.removeAllSeries();
+			ohlcSeriesCollection.removeAllSeries();
+			List<StockEntry> stocks = stockEntityManager.getStockEntries();
+			for(StockEntry se : stocks) {
+				update("Update Stock: " + se.getSymbol());
+				stockEntityManager.updateStock(se.getSymbol());
+				stockManager.update(se.getSymbol(), model, dataSeries, ohlcSeriesCollection);
+			}
+			stockManager.findSeriesStartEndDate();
 			filterPanel.setupSeriesDate();
 			update("Creating Chart Data...");
 			JFreeChart chart = null;

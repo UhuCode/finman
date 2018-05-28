@@ -1,53 +1,31 @@
 package ch.finman.core;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.math.BigDecimal;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.net.URLConnection;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
 import java.util.Enumeration;
-import java.util.HashMap;
 import java.util.Hashtable;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 
-import org.jfree.data.time.Month;
-import org.jfree.data.time.TimeSeries;
 import org.jfree.data.time.TimeSeriesCollection;
-import org.jfree.data.time.Week;
-import org.jfree.data.time.ohlc.OHLCSeries;
 import org.jfree.data.time.ohlc.OHLCSeriesCollection;
-import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.impl.SimpleLogger;
 
 import ch.finman.util.LogUtil;
-import yahoofinance.Stock;
-import yahoofinance.YahooFinance;
-import yahoofinance.histquotes.HistoricalQuote;
-import yahoofinance.histquotes.Interval;
-import yahoofinance.histquotes2.CrumbManager;
-import yahoofinance.util.RedirectableRequest;
 
 public class StockManager {
 
 	private static final int FIND_START_END_DATE = 10;
 	private static final int SET_START_END_DATE = 20;
 	private static final int RESET_START_END_DATE = 30;
-	private StockPortfolio portfolioList;
 	private List<StockItem> data;
 	private Hashtable<String, StockDataSeries> seriesTable;
 	private static LogUtil logger = LogUtil.getLogger(StockManager.class);
-	private static SimpleLogger log = (SimpleLogger) LoggerFactory.getLogger(StockManager.class);
-	private SimpleDateFormat df = new SimpleDateFormat("dd.MM.yyyy kk:mm", Locale.ENGLISH);
 	private Date startDate;
 	private Date endDate;
 	private ProgressInfo pi;
@@ -55,7 +33,6 @@ public class StockManager {
 	public StockManager(ProgressInfo progressInfo) {
 		pi = progressInfo;
 		data = new ArrayList<StockItem>();
-		portfolioList = new StockPortfolio();
 		seriesTable = new Hashtable<String, StockDataSeries>();
 	}
 
@@ -72,12 +49,6 @@ public class StockManager {
 		}
 	}
 
-	public void addStockItemToPortfolio(String portfolioName, StockItem stockConfig) {
-		portfolioList.addStockItem(portfolioName, stockConfig);
-		logger.sayOut("StockItem added to Portfolio: " + portfolioName);
-		updateProgressInfo("StockItem added to Portfolio: " + portfolioName);
-	}
-
 	public void removeAllStockItem(Collection<StockItem> stockItems) {
 		if (!stockItems.isEmpty()) {
 			logger.sayOut("Removing invalid StockItems.");
@@ -86,18 +57,21 @@ public class StockManager {
 		}
 	}
 
-	public int update(StockSeriesTableModel model, TimeSeriesCollection dataSeries, OHLCSeriesCollection ohlcSeriesCollection) {	
+	private int update(StockSeriesTableModel model, TimeSeriesCollection dataSeries, OHLCSeriesCollection ohlcSeriesCollection) {	
 		Iterator<StockItem> stockIterator = data.iterator();
 		int cnt = 0;
 		ArrayList<StockItem> failedList = new ArrayList<StockItem>();
 		while(stockIterator.hasNext()) {		
 			StockItem stockItem = (StockItem) stockIterator.next();
 			try {
-				StockDataSeries stockDataSeries = createStockData(stockItem);
+				//StockDataSeries stockDataSeries = createStockData(stockItem);
+				StockDataSeries stockDataSeries = createDbStockData(stockItem.getStockSymbol());
 				seriesTable.put(stockItem.getStockSymbol(), stockDataSeries);
 				model.addRow(stockDataSeries);
-				dataSeries.addSeries(stockDataSeries.getTimeSeries());
-				ohlcSeriesCollection.addSeries(stockDataSeries.getOHLCSeries());
+				if(stockDataSeries.getSeriesShow()) {
+					dataSeries.addSeries(stockDataSeries.getTimeSeries());
+					ohlcSeriesCollection.addSeries(stockDataSeries.getOHLCSeries());
+				}
 			} catch (IOException ioe) {
 				failedList.add(stockItem);
 				updateProgressInfo("Error retrieving Stock Data for: " + stockItem.getStockSymbol());
@@ -111,6 +85,22 @@ public class StockManager {
 		return cnt;
 	}
 
+	public void update(String symbol, StockSeriesTableModel model, TimeSeriesCollection dataSeries, OHLCSeriesCollection ohlcSeriesCollection) {	
+			try {
+				StockDataSeries stockDataSeries = createDbStockData(symbol);
+				seriesTable.put(symbol, stockDataSeries);
+				model.addRow(stockDataSeries);
+				if(stockDataSeries.getSeriesShow()) {
+					dataSeries.addSeries(stockDataSeries.getTimeSeries());
+					ohlcSeriesCollection.addSeries(stockDataSeries.getOHLCSeries());
+				}
+			} catch (IOException ioe) {
+				updateProgressInfo("Error retrieving Stock Data for: " + symbol);
+				updateProgressInfo(ioe.getMessage());
+				logger.sayErr("Error retrieving Stock Data for: " + symbol + " -> " + ioe.getMessage());
+			}
+	}
+
 	public StockDataSeries createStockData(StockItem stockItem) throws IOException {
 		StockDataSeries sds = new StockDataSeries(stockItem.getStockSymbol(), stockItem.getPricePaid());
 		if (sds.requestStockData()) {
@@ -120,6 +110,20 @@ public class StockManager {
 				updateProgressInfo("Error retrieving Stock History Data for: " + stockItem.getStockSymbol());
 				updateProgressInfo(ioe.getMessage());
 				logger.sayErr("Error retrieving Stock History Data for: " + stockItem.getStockSymbol() + " -> " + ioe.getMessage());
+			}
+		}
+		sds.resetStartEndDate();
+		return sds;
+	}
+
+	public DbStockDataSeries createDbStockData(String symbol) throws IOException {
+		DbStockDataSeries sds = new DbStockDataSeries(symbol);
+		updateProgressInfo("Processing Stock: " + symbol);
+		if (sds.requestStockData()) {
+			updateProgressInfo("Processing Stock History: " + sds.getStockName());
+			if (!sds.requestStockHistory()) {
+				updateProgressInfo("Error retrieving Stock History Data for: " + symbol);
+				logger.sayErr("Error retrieving Stock History Data for: " + symbol);
 			}
 		}
 		sds.resetStartEndDate();

@@ -23,6 +23,7 @@ import org.jfree.data.time.ohlc.OHLCItem;
 import org.jfree.data.time.ohlc.OHLCSeries;
 import org.jfree.data.xy.OHLCDataItem;
 
+import ch.finman.misc.StockItemManager;
 import ch.finman.util.LogUtil;
 import yahoofinance.Stock;
 import yahoofinance.YahooFinance;
@@ -35,19 +36,19 @@ public class StockDataSeries {
 	private float paidPrice;
 	private StockItem stockItem;
 	
-	private Stock stock;
+	protected Stock stock;
 	private List<HistoricalQuote> records;
 	
-	private Date start = null;
-	private Date end = null;
+	protected Date start = null;
+	protected Date end = null;
 	
 	private MeanAndStandardDeviation meanSd;
 	
-	private TimeSeries timeSeries;
-	private TimeSeries indexedTimeSeries;
-	private OHLCSeries ohlcSeries;
-	private boolean showSeries = true;
-	private double firstPrice;
+	protected TimeSeries timeSeries;
+	protected TimeSeries indexedTimeSeries;
+	protected OHLCSeries ohlcSeries;
+	private boolean showSeries = false;
+	protected double firstPrice;
 	private boolean showIndexedSeries = true;
 	private Interval interval = Interval.WEEKLY;
 	
@@ -105,6 +106,9 @@ public class StockDataSeries {
 			return false;
 		} else {
 			logger.sayOut("Retrieved data for: " + symbol);
+			stock.print();
+			//StockItemManager sim = new StockItemManager();
+			//sim.createStockItem(stock);
 			return true;
 		}
 	}
@@ -112,7 +116,7 @@ public class StockDataSeries {
 	public boolean requestStockHistory() throws IOException {
 		if (records == null) {records = new ArrayList<HistoricalQuote>();}
 		logger.sayOut("Requesting history data for: " + stock.getName());
-		List<HistoricalQuote> list = stock.getHistory(Interval.DAILY);
+		List<HistoricalQuote> list = stock.getHistory(interval);
 		if(!list.isEmpty()) {
 			logger.sayOut("Received " + list.size() + " history data records. ");
 			records = cleanHistoryList(list);
@@ -297,7 +301,7 @@ public class StockDataSeries {
 		findTimeSeriesMeanStd();
 	}
 
-	private void findStartEndDate() {
+	protected void findStartEndDate() {
 		Iterator<HistoricalQuote> iter = records.iterator();
 		while(iter.hasNext()) {
 			HistoricalQuote itm = (HistoricalQuote)iter.next();
